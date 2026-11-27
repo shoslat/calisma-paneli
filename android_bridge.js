@@ -1061,7 +1061,13 @@
       if (st.headphoneConnected) {
         outPill.innerHTML = `${SVG.headphone} <span>${st.outputLabel || "Kulaklık"}</span>`;
       } else if (st.remotePlayback) {
-        outPill.innerHTML = `${SVG.phone} <span>${st.outputLabel || "Xiaomi 13"}</span>`;
+        const cleanRemote = String(st.outputLabel || st.remotePhoneName || "Xiaomi 13")
+          .replace(/(listening on|playing on|üzerinde|cihazında|dinleniyor|dinliyor|çalıyor|çalınıyor)/gi, "")
+          .replace(/['’](te|ta|de|da|ten|tan)\b/gi, "")
+          .replace(/\s{2,}/g, " ")
+          .replace(/^[\s·:\-]+|[\s·:\-]+$/g, "")
+          .trim() || (st.remotePhoneName || "Xiaomi 13");
+        outPill.innerHTML = `${SVG.phone} <span>${cleanRemote}</span>`;
       } else if (st.guardBlocking) {
         outPill.innerHTML = `${SVG.shield} <span>Hoparlör Korumalı</span>`;
       } else {
@@ -1076,7 +1082,7 @@
     const guardRemoteBtn = document.getElementById("yksGuardRemoteBtn");
     if (guardRemoteBtn) {
       const pName = st.remotePhoneName || "Xiaomi 13";
-      guardRemoteBtn.innerHTML = `${SVG.phone} <span>${pName}'ten çalıyor</span>`;
+      guardRemoteBtn.innerHTML = `${SVG.phone} <span>${pName}</span>`;
     }
 
     const hasValidArt = Boolean(st.artDataUrl && st.artDataUrl.startsWith("data:image/"));
@@ -1187,16 +1193,18 @@
 
     const volSlider = document.getElementById("yksMediaVolSlider");
     const volIconBtn = document.getElementById("yksMediaVolIconBtn");
-    const vPct = st.guardBlocking ? 0 : (st.volumePct != null ? st.volumePct : 50);
+    const volLocked = Boolean(st.guardBlocking || (st.remotePlayback && !st.headphoneConnected));
+    const vPct = volLocked ? 0 : (st.volumePct != null ? st.volumePct : 50);
     if (volSlider) {
-      volSlider.classList.toggle("locked", Boolean(st.guardBlocking));
+      volSlider.classList.toggle("locked", volLocked);
+      volSlider.disabled = volLocked;
       if (document.activeElement !== volSlider) {
         volSlider.value = String(vPct);
         styleRangeFill(volSlider, vPct, true);
       }
     }
     if (volIconBtn) {
-      const vIcon = (st.guardBlocking || vPct === 0) ? "mute" : "vol";
+      const vIcon = (volLocked || vPct === 0) ? "mute" : "vol";
       if (volIconBtn.dataset.icon !== vIcon) {
         volIconBtn.innerHTML = vIcon === "mute" ? SVG.volMute : SVG.vol;
         volIconBtn.dataset.icon = vIcon;
@@ -1477,7 +1485,7 @@
 
       <div class="yks-guard-hint" id="yksGuardHint">
         <span>🛡️ Kulaklık takılı değil · Sessiz modda hoparlör kilitli</span>
-        <button type="button" class="yks-guard-remote-btn" id="yksGuardRemoteBtn">${SVG.phone} <span>Xiaomi 13'ten çalıyor</span></button>
+        <button type="button" class="yks-guard-remote-btn" id="yksGuardRemoteBtn">${SVG.phone} <span>Xiaomi 13</span></button>
       </div>
 
       <div class="yks-media-capsule">
@@ -1552,9 +1560,17 @@
     document.getElementById("yksMiniPlayBtn").addEventListener("click", (ev) => { ev.stopPropagation(); window.AndroidApp.mediaAction("play_pause"); });
     document.getElementById("yksMiniNextBtn").addEventListener("click", (ev) => { ev.stopPropagation(); window.AndroidApp.mediaAction("next"); });
 
-    document.getElementById("yksMediaVolIconBtn").addEventListener("click", () => window.AndroidApp.mediaAction("mute"));
+    document.getElementById("yksMediaVolIconBtn").addEventListener("click", () => {
+      if (latestMediaState.remotePlayback && !latestMediaState.headphoneConnected) return;
+      window.AndroidApp.mediaAction("mute");
+    });
     document.getElementById("yksMediaVolSlider").addEventListener("input", (ev) => {
       const pct = Number(ev.target.value);
+      if (latestMediaState.remotePlayback && !latestMediaState.headphoneConnected) {
+        ev.target.value = "0";
+        styleRangeFill(ev.target, 0, true);
+        return;
+      }
       if (latestMediaState.guardBlocking && pct > 0) {
         ev.target.value = "0";
         styleRangeFill(ev.target, 0, true);
